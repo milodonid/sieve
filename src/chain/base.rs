@@ -17,10 +17,12 @@
 //! 3. **Types**: every Base block carries a type-0x7E deposit transaction,
 //!    so bodies/receipts use the OP envelope types.
 //!
-//! Known gap (documented, not handled): Cobalt adds tx type 0x79, which the
-//! OP envelope types here do not decode; a block carrying one fails body
-//! decoding. Base can also activate an upgrade via L1 signalling without a
-//! client release, which shifts the fork-id the same way Cobalt did.
+//! Known future risk (documented, not handled): the unscheduled "Everest"
+//! fork enables tx type 0x79 (EIP-8130 Base transactions) with a new receipt
+//! type, which the OP envelope types here do not decode; a block carrying one
+//! fails body decoding. Everest's timestamp also shifts the fork-id. Base can
+//! activate an upgrade via L1 signalling without a client release, though
+//! mainnet runs that signal in metrics-only mode today.
 
 use super::{op_stack, ChainTypes};
 use alloy_primitives::B256;
@@ -75,9 +77,9 @@ enum BaseHardfork {
     Azul,
     /// 2026-06-25: B20 native token precompiles.
     Beryl,
-    /// 2026-09-30: tx type 0x79, dynamic upgrades.
+    /// 2026-09-30: B20 precompile versions, activation registry.
     Cobalt,
-    /// 2026-11-05: scheduled.
+    /// 2026-11-05: 200 ms blocks (five per header timestamp second).
     Denim,
 }
 
