@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Base: Cobalt and Denim in the chain spec.** Base activated Cobalt at
+  2026-09-30 18:00 UTC and schedules Denim for 2026-11-05 18:00 UTC. Without
+  them Sieve announced the stale fork-id `0xea0159eb/0`, current Base nodes
+  refused the session, and the only peers left were nodes frozen shortly
+  after Cobalt, so sync stopped with "no canonical quorum". The fork-id is now
+  `0x68647e86` (next Denim) until Denim, then `0x169d85a3/0`.
+
 ## [0.3.0] - 2026-10-01
 
 Base archive bootstrap. A Base index can now start from Base's published V2

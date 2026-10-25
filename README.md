@@ -181,11 +181,12 @@ OP-stack notes (Base, OP mainnet, Unichain, and World Chain):
 - Test connectivity without a config: `sieve peers --chain base` /
   `sieve peers --chain optimism` / `sieve peers --chain unichain` /
   `sieve peers --chain world`.
-- Known limitation: Base's unscheduled "Cobalt" hardfork will introduce a
-  new transaction type (`0x79`) and can be activated via L1 signalling.
-  When it is scheduled, Sieve will need an update to keep following Base.
-  Similarly, future OP-stack hardforks that change the fork-id require a
-  Sieve update to keep the handshake current.
+- Base's Cobalt hardfork (active 2026-09-30) and Denim (scheduled
+  2026-11-05) are in the chain spec, so the fork-id matches current Base
+  nodes. Known limitation: Cobalt's new transaction type (`0x79`) is not
+  decoded yet; a block carrying one fails body decoding. Future hardforks
+  that change the fork-id, including ones activated via L1 signalling,
+  require a Sieve update to keep the handshake current.
 
 ```toml
 [p2p]

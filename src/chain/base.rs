@@ -4,11 +4,12 @@
 //! client (base-reth-node). Three things differ from the pinned reth's
 //! built-in `BASE_MAINNET`:
 //!
-//! 1. **Hardforks**: two post-Jovian forks are live — Azul (2026-05-28,
-//!    which also activates Ethereum Osaka) and Beryl (2026-06-25). Without
-//!    them the EIP-2124 fork-id would be stale and current peers would
-//!    reject the handshake. The expected head fork-id is `0xea0159eb/0`
-//!    (verified by a unit test below).
+//! 1. **Hardforks**: three post-Jovian forks are live — Azul (2026-05-28,
+//!    which also activates Ethereum Osaka), Beryl (2026-06-25) and Cobalt
+//!    (2026-09-30) — and Denim is scheduled for 2026-11-05. Without them the
+//!    EIP-2124 fork-id would be stale and current peers would reject the
+//!    handshake. The fork-id is `0x68647e86` with Denim next until Denim
+//!    activates, then `0x169d85a3/0` (verified by unit tests below).
 //! 2. **Discovery**: Base EL nodes run discv5 with a custom packet
 //!    protocol id `basev0` (default is `discv5`), hard-partitioning their
 //!    DHT — a stock discv5 node cannot even decode Base discovery packets.
@@ -16,9 +17,10 @@
 //! 3. **Types**: every Base block carries a type-0x7E deposit transaction,
 //!    so bodies/receipts use the OP envelope types.
 //!
-//! Known future risk (documented, not handled): the unscheduled "Cobalt"
-//! fork will add tx type 0x79 and can be activated via L1 signalling
-//! without a client release, which would shift the fork-id.
+//! Known gap (documented, not handled): Cobalt adds tx type 0x79, which the
+//! OP envelope types here do not decode; a block carrying one fails body
+//! decoding. Base can also activate an upgrade via L1 signalling without a
+//! client release, which shifts the fork-id the same way Cobalt did.
 
 use super::{op_stack, ChainTypes};
 use alloy_primitives::B256;
@@ -39,6 +41,14 @@ const AZUL_TIMESTAMP: u64 = 1_779_991_200;
 
 /// Beryl activation timestamp on Base mainnet (2026-06-25 18:00:00 UTC).
 const BERYL_TIMESTAMP: u64 = 1_782_410_400;
+
+/// Cobalt activation timestamp on Base mainnet (2026-09-30 18:00:00 UTC),
+/// from base/node-reth `crates/common/chains/src/config.rs`.
+const COBALT_TIMESTAMP: u64 = 1_790_791_200;
+
+/// Denim activation timestamp on Base mainnet (2026-11-05 18:00:00 UTC),
+/// from the same file.
+const DENIM_TIMESTAMP: u64 = 1_793_901_600;
 
 /// discv5 packet protocol id used by Base EL nodes since Azul.
 const BASE_V0_PROTOCOL_ID: [u8; 6] = *b"basev0";
@@ -65,6 +75,10 @@ enum BaseHardfork {
     Azul,
     /// 2026-06-25: B20 native token precompiles.
     Beryl,
+    /// 2026-09-30: tx type 0x79, dynamic upgrades.
+    Cobalt,
+    /// 2026-11-05: scheduled.
+    Denim,
 }
 
 impl Hardfork for BaseHardfork {
@@ -72,6 +86,8 @@ impl Hardfork for BaseHardfork {
         match self {
             Self::Azul => "Azul",
             Self::Beryl => "Beryl",
+            Self::Cobalt => "Cobalt",
+            Self::Denim => "Denim",
         }
     }
 }
@@ -90,6 +106,14 @@ static BASE_MAINNET_CURRENT: LazyLock<Arc<OpChainSpec>> = LazyLock::new(|| {
     spec.inner.hardforks.insert(
         BaseHardfork::Beryl,
         ForkCondition::Timestamp(BERYL_TIMESTAMP),
+    );
+    spec.inner.hardforks.insert(
+        BaseHardfork::Cobalt,
+        ForkCondition::Timestamp(COBALT_TIMESTAMP),
+    );
+    spec.inner.hardforks.insert(
+        BaseHardfork::Denim,
+        ForkCondition::Timestamp(DENIM_TIMESTAMP),
     );
     Arc::new(spec)
 });
@@ -170,12 +194,27 @@ mod tests {
     }
 
     #[test]
-    fn latest_fork_id_matches_beryl() {
-        // Expected head fork-id after Beryl, verified against
-        // base-reth-node's own fork-id test vectors + EIP-2124 CRC chain.
+    fn latest_fork_id_matches_denim() {
+        // EIP-2124 CRC chain: Beryl's 0xea0159eb, then Cobalt's and
+        // Denim's activation timestamps.
         let fork_id = BaseChain::chain_spec().latest_fork_id();
-        assert_eq!(fork_id.hash.0, [0xea, 0x01, 0x59, 0xeb]);
+        assert_eq!(fork_id.hash.0, [0x16, 0x9d, 0x85, 0xa3]);
         assert_eq!(fork_id.next, 0);
+    }
+
+    #[test]
+    fn fork_id_between_cobalt_and_denim() {
+        // What a current Base node announces until Denim activates: the
+        // Cobalt hash with Denim as the next fork. A spec without Cobalt
+        // announces 0xea0159eb/0 here and current peers refuse the session.
+        let head = reth_chainspec::Head {
+            number: 52_815_055,
+            timestamp: COBALT_TIMESTAMP + 1,
+            ..Default::default()
+        };
+        let fork_id = BaseChain::chain_spec().fork_id(&head);
+        assert_eq!(fork_id.hash.0, [0x68, 0x64, 0x7e, 0x86]);
+        assert_eq!(fork_id.next, DENIM_TIMESTAMP);
     }
 
     #[test]
@@ -297,7 +336,7 @@ mod tests {
     }
 
     #[test]
-    fn azul_and_beryl_are_scheduled() {
+    fn post_jovian_forks_are_scheduled() {
         let spec = BaseChain::chain_spec();
         assert!(spec
             .inner
@@ -314,5 +353,15 @@ mod tests {
             .hardforks
             .fork(BaseHardfork::Beryl)
             .active_at_timestamp(BERYL_TIMESTAMP - 1));
+        assert!(spec
+            .inner
+            .hardforks
+            .fork(BaseHardfork::Cobalt)
+            .active_at_timestamp(COBALT_TIMESTAMP));
+        assert!(!spec
+            .inner
+            .hardforks
+            .fork(BaseHardfork::Denim)
+            .active_at_timestamp(DENIM_TIMESTAMP - 1));
     }
 }
